@@ -6,6 +6,7 @@ package printer
 
 import (
 	"syscall"
+	"unsafe"
 )
 
 type DOC_INFO_1 struct {
@@ -13,6 +14,19 @@ type DOC_INFO_1 struct {
 	OutputFile *uint16
 	Datatype   *uint16
 }
+
+type PRINTER_INFO_5 struct {
+	PrinterName              *uint16
+	PortName                 *uint16
+	Attributes               uint32
+	DeviceNotSelectedTimeout uint32
+	TransmissionRetryTimeout uint32
+}
+
+const (
+	PRINTER_ENUM_LOCAL       = 2
+	PRINTER_ENUM_CONNECTIONS = 4
+)
 
 //sys	GetDefaultPrinter(buf *uint16, bufN *uint32) (err error) = winspool.GetDefaultPrinterW
 //sys	ClosePrinter(h syscall.Handle) (err error) = winspool.ClosePrinter
@@ -22,6 +36,7 @@ type DOC_INFO_1 struct {
 //sys	WritePrinter(h syscall.Handle, buf *byte, bufN uint32, written *uint32) (err error) = winspool.WritePrinter
 //sys	StartPagePrinter(h syscall.Handle) (err error) = winspool.StartPagePrinter
 //sys	EndPagePrinter(h syscall.Handle) (err error) = winspool.EndPagePrinter
+//sys	EnumPrinters(flags uint32, name *uint16, level uint32, buf *byte, bufN uint32, needed *uint32, returned *uint32) (err error) = winspool.EnumPrintersW
 
 func Default() (string, error) {
 	b := make([]uint16, 3)
@@ -38,6 +53,31 @@ func Default() (string, error) {
 		}
 	}
 	return syscall.UTF16ToString(b), nil
+}
+
+// ReadNames return printer names on the system
+func ReadNames() ([]string, error) {
+	const flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
+	var needed, returned uint32
+	buf := make([]byte, 1)
+	err := EnumPrinters(flags, nil, 5, &buf[0], uint32(len(buf)), &needed, &returned)
+	if err != nil {
+		if err != syscall.ERROR_INSUFFICIENT_BUFFER {
+			return nil, err
+		}
+		buf = make([]byte, needed)
+		err = EnumPrinters(flags, nil, 5, &buf[0], uint32(len(buf)), &needed, &returned)
+		if err != nil {
+			return nil, err
+		}
+	}
+	ps := (*[1024]PRINTER_INFO_5)(unsafe.Pointer(&buf[0]))[:returned]
+	names := make([]string, 0, returned)
+	for _, p := range ps {
+		v := (*[1024]uint16)(unsafe.Pointer(p.PrinterName))[:]
+		names = append(names, syscall.UTF16ToString(v))
+	}
+	return names, nil
 }
 
 type Printer struct {

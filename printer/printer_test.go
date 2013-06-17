@@ -38,3 +38,21 @@ func TestPrinter(t *testing.T) {
 		t.Fatalf("EndPage failed: %v", err)
 	}
 }
+
+func TestReadNames(t *testing.T) {
+	names, err := ReadNames()
+	if err != nil {
+		t.Fatalf("ReadNames failed: %v", err)
+	}
+	name, err := Default()
+	if err != nil {
+		t.Fatalf("Default failed: %v", err)
+	}
+	// make sure default printer is listed
+	for _, v := range names {
+		if v == name {
+			return
+		}
+	}
+	t.Fatal("Default printed %q is not listed amongst printers returned by ReadNames %q", name, names)
+}
